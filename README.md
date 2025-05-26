@@ -197,9 +197,67 @@ Each captured flow includes the method, URL, headers, and parsed JSON request/re
 
 ---
 
-## 🙌 Contributions
+## 📚 Use Cases
 
-Feel free to extend this tool with more proxy automation, better cert handling, or a simple UI for the control endpoints.
+### ✅ Automated Network Testing for Android & iOS
+
+You can integrate `mitmproxy` recording into your mobile test lifecycle to verify network behavior during test execution.
+
+---
+
+### 🔁 Example Flow:
+
+1. **Start mitmproxy with the addon** (before your test suite):
+
+```bash
+mitmdump -p 8080 -s proxy-session-controller.py
+```
+
+2. **Start recording flows** (before your test begins):
+
+```bash
+curl http://localhost:9999/start_recording
+```
+
+3. **Run your UI/E2E test** that performs network requests from the Android emulator or iOS simulator.
+
+4. **Stop recording after the test is finished**:
+
+```bash
+curl http://localhost:9999/stop_recording
+```
+
+5. **Validate the output** in `flows.json` using a custom validation script.
+
+---
+
+### 🧪 Example: Test Validation Script (Python)
+
+```python
+import json
+
+with open("flows.json") as f:
+    flows = json.load(f)
+
+expected_url = "https://api.example.com/data"
+matched = any(flow["request"]["url"] == expected_url for flow in flows)
+
+assert matched, f"Expected request to {expected_url} not found!"
+print("[✓] Network request verified.")
+```
+
+---
+
+### 💡 Use With Your Test Framework
+
+In your test framework (e.g., XCTest for iOS, Espresso or UIAutomator for Android), you can:
+
+- Trigger `/start_recording` in the test setup phase
+- Run the UI interaction
+- Trigger `/stop_recording` in the test teardown
+- Run a validation script after the test completes
+
+This allows you to **assert that expected network calls were made**, validate request payloads, and check response data without needing to modify your app code.
 
 ---
 
@@ -219,3 +277,9 @@ networksetup -listallnetworkservices | tail +2 | while read -r interface; do
   networksetup -setsecurewebproxystate "$interface" off
 done
 ```
+
+---
+
+## 🙌 Contributions
+
+Feel free to extend this tool with more proxy automation, better cert handling, or a simple UI for the control endpoints.
