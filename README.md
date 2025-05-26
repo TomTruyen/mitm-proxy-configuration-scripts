@@ -124,7 +124,11 @@ These endpoints allow dynamic control of recording and local response mapping.
 ### ▶️ Start Recording
 
 ```bash
+# Default recording, outputs to flows.json
 curl http://localhost:9999/start_recording
+
+# Optional name for recording, outputs to "name" pass
+curl http://localhost:9999/start_recording?name=output_file_name"
 ```
 
 ### ⏹️ Stop Recording and Save

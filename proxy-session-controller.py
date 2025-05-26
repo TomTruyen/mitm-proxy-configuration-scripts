@@ -2,11 +2,13 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from mitmproxy import ctx, http
 import json
+from urllib.parse import urlparse, parse_qs
 
 class Recorder:
     def __init__(self):
         self.recording = False
         self.flows = []
+        self.output_filename = "flows.json"
 
     def request(self, flow: http.HTTPFlow):
         if self.recording:
@@ -38,8 +40,8 @@ class Recorder:
                 return content  # fall back to raw if invalid JSON
         return content
 
-    def save_flows_as_json(self, path="flows.json"):
-        ctx.log.info(f"Saving {len(self.flows)} flows to {path}")
+    def save_flows_as_json(self):
+        ctx.log.info(f"Saving {len(self.flows)} flows to {self.output_filename}")
         data = []
         for flow in self.flows:
             if flow.response:
@@ -62,7 +64,7 @@ class Recorder:
                         "body": response_content
                     }
                 })
-        with open(path, "w") as f:
+        with open(self.output_filename, "w") as f:
             json.dump(data, f, indent=2)
 
 class ControlServer(BaseHTTPRequestHandler):
@@ -70,13 +72,21 @@ class ControlServer(BaseHTTPRequestHandler):
     map_local = {}  # class variable for local mapping
 
     def do_GET(self):
-        if self.path == "/start_recording":
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
+        if path == "/start_recording":
             ControlServer.recorder.recording = True
             ControlServer.recorder.flows = []
+
+            name = query.get("name", ["flows"])[0]
+            ControlServer.recorder.output_filename = f"{name}.json"
+
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b"Recording started")
-        elif self.path == "/stop_recording":
+            self.wfile.write(f"Recording started as {name}.json".encode())
+        elif path == "/stop_recording":
             ControlServer.recorder.recording = False
             ControlServer.recorder.save_flows_as_json()
             self.send_response(200)
