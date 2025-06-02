@@ -40,6 +40,7 @@ mitmdump --version
 
 ### ⚠️ Requirements:
 - Emulator must be rooted (use x86 or ARM images that support root).
+- Emulator must be started using `-writable-system` flag to be able to perform an `adb remount`
 - Android SDK + ADB installed and configured in your `$PATH`.
 
 ### 🛠️ Setup Steps:
