@@ -16,13 +16,24 @@ if [ ! -f ~/.mitmproxy/mitmproxy-ca-cert.cer ]; then
     pkill -f mitmdump
 fi
 
+# Check if Emulator booted
+BOOTED=$(adb devices | awk '/^emulator-.*device$/{print $1; exit}')
+if [ -z "$BOOTED" ]; then
+    echo "[x] No Android emulator/device booted. Please start an emulator try again..."
+    exit 1
+fi
+
+echo "[✓] Using emulator: $BOOTED"
+
+echo "[*] Installing root certificate on $BOOTED..."
+
 # CA Certificates in Android are stored by the name of their hash, with a ‘0’ as extension (Example: c8450d0d.0)
 HASHED_CERT_NAME=$(openssl x509 -inform PEM -subject_hash_old -in "$MITM_CERT_PATH/mitmproxy-ca-cert.cer" | head -1)
 MITM_CERT_FINAL_NAME="$HASHED_CERT_NAME.0"
 MITM_CERT_FINAL_PATH="$MITM_CERT_PATH/$MITM_CERT_FINAL_NAME"
 cp "$MITM_CERT_PATH/mitmproxy-ca-cert.cer" "$MITM_CERT_FINAL_PATH"
 
-# Set up emulator proxy
+# Set up emulator proxyœ
 echo "[*] Setting proxy on emulator..."
 adb emu network delay none
 adb emu network speed full
