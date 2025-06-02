@@ -3,7 +3,7 @@
 set -e
 
 MITM_PORT=8080
-MITM_CERT_PATH="~/.mitmproxy/"
+MITM_CERT_PATH="$HOME/.mitmproxy"
 HOST_IP="10.0.2.2"  # This is how emulators access the host
 
 echo "[*] Starting Android emulator mitmproxy setup..."
