@@ -1,3 +1,4 @@
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from mitmproxy import ctx, http
@@ -42,6 +43,8 @@ class Recorder:
 
     def save_flows_as_json(self):
         ctx.log.info(f"Saving {len(self.flows)} flows to {self.output_filename}")
+        os.makedirs(os.path.dirname(self.output_filename), exist_ok=True)
+        
         data = []
         for flow in self.flows:
             if flow.response:
