@@ -45,7 +45,20 @@ mitmdump --version
 
 ### 🛠️ Setup Steps:
 
-1. Run the script:
+1. Launch emulator with writable system
+
+You should find an emulator that can be rooted using `adb root`. In most cases these are the emulators WITHOUT Google Play Services.
+
+Launch the emulator with a writable-system partition
+
+```bash
+# Find name of AVD
+emulator -list-avds
+
+emulator -avd <name of avd> -writable-system
+```
+
+2. Run the script:
 
 ```bash
 chmod +x android-certificate-install.sh
