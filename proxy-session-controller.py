@@ -5,6 +5,50 @@ from mitmproxy import ctx, http
 import json
 from urllib.parse import urlparse, parse_qs
 
+# On Startup the Emulator/Simulator performs a lot of API calls to get the system ready. This causes in a lot of noise on the Network
+# Here we list endpoints that we don't want to "capture" since they are not important for us. Doing so reduces the Noise in our Network Logs
+IGNORED_ENDPOINTS = [
+    # Android
+    "gstatic.com",       # Google Fonts / Static resources
+    "tenor.com",         # GIFs for keyboard input, Gboard
+    "googleapis.com",    # System and Play Services API calls
+    "mtalk.google.com",  # GCM/FCM (push notification service)
+    "clients4.google.com", # Google update/checkin service
+    "clients2.google.com", # Similar service to above
+    "android.clients.google.com", # Device check-in, sync
+    "connectivitycheck.gstatic.com", # Network status check
+    "update.googleapis.com", # App / Play Store update checks
+    "csi.gstatic.com",       # Google connection status indicator
+    "play.googleapis.com",   # Google Play API
+
+    # iOS
+    "apple.com",          # General Apple services
+    "icloud.com",         # iCloud sync / backup
+    "itunes.apple.com",   # App Store or media previews
+    "mzstatic.com",       # Apple media content/CDNs
+    "push.apple.com",     # APNs (Push notification service)
+    "configuration.apple.com", # iOS config services
+    "init.ess.apple.com", # Device activation or health check
+    "crashlytics.com",    # Crash reporting (often auto-integrated)
+]
+
+def _is_ignored(flow: http.HTTPFlow) -> bool:
+    """
+    Return True when the request host is in the IGNORED_ENDPOINTS
+    This will be used to avoid endpoints that we don't care for that spam on initial boot
+    """
+    host = urlparse(flow.request.pretty_url).netloc.lower()
+    return any(ignored in host for ignored in IGNORED_ENDPOINTS)
+
+def try_parse_json(content, headers):
+    content_type = headers.get("content-type", "")
+    if "application/json" in content_type.lower():
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            return content  # fall back to raw if invalid JSON
+    return content
+
 class Recorder:
     def __init__(self):
         self.recording = False
@@ -12,7 +56,7 @@ class Recorder:
         self.output_filename = "flows.json"
 
     def request(self, flow: http.HTTPFlow):
-        if self.recording:
+        if self.recording and not _is_ignored(flow):
             url = flow.request.pretty_url
             ctx.log.info(f"Request URL: {url}")
             if url in ControlServer.map_local:
@@ -29,18 +73,9 @@ class Recorder:
                     ctx.log.error(f"File not found for URL {url}: {file_path}")
 
     def response(self, flow: http.HTTPFlow):
-        if self.recording:
+        if self.recording and not _is_ignored(flow):
             self.flows.append(flow) # Store the flow to later on save as JSON
-
-    def try_parse_json(self, content, headers):
-        content_type = headers.get("content-type", "")
-        if "application/json" in content_type.lower():
-            try:
-                return json.loads(content)
-            except json.JSONDecodeError:
-                return content  # fall back to raw if invalid JSON
-        return content
-
+            
     def save_flows_as_json(self):
         ctx.log.info(f"Saving {len(self.flows)} flows to {self.output_filename}")
         os.makedirs(os.path.dirname(self.output_filename), exist_ok=True)
@@ -51,8 +86,8 @@ class Recorder:
                 req_body = flow.request.get_text()
                 res_body = flow.response.get_text()
 
-                request_content = self.try_parse_json(req_body, flow.request.headers)
-                response_content = self.try_parse_json(res_body, flow.response.headers)
+                request_content = try_parse_json(req_body, flow.request.headers)
+                response_content = try_parse_json(res_body, flow.response.headers)
 
                 data.append({
                     "request": {
