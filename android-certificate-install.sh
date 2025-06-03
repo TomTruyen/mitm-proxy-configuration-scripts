@@ -33,12 +33,6 @@ MITM_CERT_FINAL_NAME="$HASHED_CERT_NAME.0"
 MITM_CERT_FINAL_PATH="$MITM_CERT_PATH/$MITM_CERT_FINAL_NAME"
 cp "$MITM_CERT_PATH/mitmproxy-ca-cert.cer" "$MITM_CERT_FINAL_PATH"
 
-# Set up emulator proxyœ
-echo "[*] Setting proxy on emulator..."
-adb emu network delay none
-adb emu network speed full
-adb shell settings put global http_proxy "$HOST_IP:$MITM_PORT"
-
 # Install cert into system cert store
 echo "[*] Installing CA cert in emulator system store..."
 
@@ -82,5 +76,19 @@ else
     adb reboot
     adb wait-for-device
 fi
+
+sleep 10
+
+echo "[*] Resetting emulator Wi-Fi..."
+adb shell svc wifi disable
+sleep 1
+adb shell svc wifi enable
+sleep 2
+
+# Set up emulator proxyœ
+echo "[*] Setting proxy on emulator..."
+adb emu network delay none
+adb emu network speed full
+adb shell settings put global http_proxy "$HOST_IP:$MITM_PORT"
 
 echo "[✓] Android emulator is now routed through mitmproxy with trusted CA."
