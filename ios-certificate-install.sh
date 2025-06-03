@@ -16,21 +16,21 @@ if [ ! -f ~/.mitmproxy/mitmproxy-ca-cert.pem ]; then
 fi
 
 # Check if Simulator booted
-BOOTED=$(xcrun simctl list devices | grep -E 'Booted' | head -1 | awk -F '[()]' '{print $2}')
-if [ -z "$BOOTED" ]; then
+SIMULATOR=$(xcrun simctl list devices | grep -E 'Booted' | head -1 | awk -F '[()]' '{print $2}')
+if [ -z "$SIMULATOR" ]; then
     echo "[x] No Simulator Booted. Please boot a simulator and try again..."
     exit 1
 fi
 
-echo "[✓] Using simulator: $BOOTED"
+echo "[✓] Using simulator: $SIMULATOR"
 
-echo "[*] Installing root certificate on $BOOTED..."
+echo "[*] Installing root certificate on $SIMULATOR..."
 
 # Copy cert locally
 cp ~/.mitmproxy/mitmproxy-ca-cert.pem "$MITM_CERT_PATH"
 
 # Try installing cert into simulator keychain
-if xcrun simctl keychain "$BOOTED" add-root-cert "$MITM_CERT_PATH" 2>/dev/null; then
+if xcrun simctl keychain "$SIMULATOR" add-root-cert "$MITM_CERT_PATH" 2>/dev/null; then
     echo "[✓] Certificate installed into simulator keychain."
 else
     echo "[x] simctl unavailable - automatic install not possible."
