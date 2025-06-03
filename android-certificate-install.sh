@@ -41,20 +41,46 @@ adb shell settings put global http_proxy "$HOST_IP:$MITM_PORT"
 
 # Install cert into system cert store
 echo "[*] Installing CA cert in emulator system store..."
+
 echo "[*] Disabling Verification..."
 adb root
 adb shell avbctl disable-verification
 adb reboot
 adb wait-for-device
 
-echo "[*] Pushing certificate..."
-adb root
-adb remount
-adb push "$MITM_CERT_FINAL_PATH" /system/etc/security/cacerts
-adb shell chmod 644 /system/etc/security/cacerts/$MITM_CERT_FINAL_NAME
+ANDROID_API_LEVEL=$(adb -s "$BOOTED" shell getprop ro.build.version.sdk | tr -d '\r')
+if [ "$ANDROID_API_LEVEL" -ge 34 ]; then
+    # https://www.g1a55er.net/Android-14-Still-Allows-Modification-of-System-Certificates
+    echo "[*] Detected Android 14+ (API $ANDROID_API_LEVEL) – using Conscrypt APEX method"
 
-echo "[*] Rebooting emulator to apply certificate..."
-adb reboot
-adb wait-for-device
+    echo "[*] Rewriting mount namespaces for system certificates..."
+    adb root
+    adb shell setenforce 0
+    adb shell mount -o remount,exec /apex
+    adb shell cp -r -p /apex/com.android.conscrypt /apex/com.android.conscrypt-bak
+    adb shell umount -l /apex/com.android.conscrypt
+    adb shell rm -rf /apex/com.android.conscrypt
+    adb shell mv /apex/com.android.conscrypt-bak /apex/com.android.conscrypt
+    adb shell killall system_server
+
+    echo "[*] Pushing certificate..."
+    adb push "$MITM_CERT_FINAL_PATH" /apex/com.android.conscrypt/cacerts
+    adb shell chmod 644 /apex/com.android.conscrypt/cacerts/$MITM_CERT_FINAL_NAME
+else
+    echo "[*] Detected Android <= 13 (API $ANDROID_API_LEVEL) – using classic /system method"
+    # (Android 13 and below method)
+    echo "[*] Remounting system..."
+    adb root
+    adb remount
+
+    echo "[*] Pushing certificate..."
+    adb push "$MITM_CERT_FINAL_PATH" /system/etc/security/cacerts
+    adb shell chmod 644 /system/etc/security/cacerts/$MITM_CERT_FINAL_NAME
+    adb shell restorecon -v /system/etc/security/cacerts/$MITM_CERT_FINAL_NAME
+
+    echo "[*] Rebooting emulator to apply certificate..."
+    adb reboot
+    adb wait-for-device
+fi
 
 echo "[✓] Android emulator is now routed through mitmproxy with trusted CA."
