@@ -37,9 +37,6 @@ MITM_CERT_FINAL_NAME="$HASHED_CERT_NAME.0"
 MITM_CERT_FINAL_PATH="$MITM_CERT_PATH/$MITM_CERT_FINAL_NAME"
 cp "$MITM_CERT_PATH/mitmproxy-ca-cert.cer" "$MITM_CERT_FINAL_PATH"
 
-echo "[*] Set 'Stay Awake' mode to active"
-adb_s shell svc power stayon true
-
 # Verification needs to be disabled for some specific cases
 echo "[*] Disabling Verification..."
 adb_s root
@@ -107,5 +104,7 @@ adb_s emu network speed full
 adb_s shell settings put global http_proxy "$HOST_IP:$MITM_PORT"
 echo "[✓] Proxy setup complete"
 
+echo "[*] Set 'Stay Awake' mode to active"
+adb_s shell svc power stayon true
 
 echo "[✓] Android emulator is now routed through mitmproxy with trusted CA."
