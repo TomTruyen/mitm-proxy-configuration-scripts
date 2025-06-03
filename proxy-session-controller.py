@@ -109,16 +109,21 @@ class ControlServer(BaseHTTPRequestHandler):
     recorder = None  # class variable
     map_local = {}  # class variable for local mapping
 
-    def do_GET(self):
+    def read_body(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length).decode('utf-8')
+        return json.loads(body)
+
+    def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
-        query = parse_qs(parsed.query)
-
         if path == "/start_recording":
+            payload = self.read_body()
+
             ControlServer.recorder.recording = True
             ControlServer.recorder.flows = []
 
-            name = query.get("name", ["flows"])[0]
+            name = payload.get("name") or "flows"
             ControlServer.recorder.output_filename = f"{name}.json"
 
             self.send_response(200)
@@ -130,24 +135,7 @@ class ControlServer(BaseHTTPRequestHandler):
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"Recording stopped and saved")
-        else:
-            self.send_response(404)
-            self.end_headers()
-            self.wfile.write(b"Unknown command")
-
-    def do_POST(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length).decode('utf-8')
-
-        try:
-            data = json.loads(body)
-        except json.JSONDecodeError:
-            self.send_response(400)
-            self.end_headers()
-            self.wfile.write(b"Invalid JSON")
-            return
-
-        if self.path == "/map_local/enable":
+        elif path == "/map_local/enable":
             url = data.get("url")
             file_path = data.get("file_path")
             if url and file_path:
@@ -159,7 +147,7 @@ class ControlServer(BaseHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
                 self.wfile.write(b"Missing 'url' or 'file_path'")
-        elif self.path == "/map_local/disable":
+        elif path == "/map_local/disable":
             url = data.get("url")
             if url in ControlServer.map_local:
                 del ControlServer.map_local[url]
