@@ -33,17 +33,21 @@ cp ~/.mitmproxy/mitmproxy-ca-cert.pem "$MITM_CERT_PATH"
 if xcrun simctl keychain "$BOOTED" add-root-cert "$MITM_CERT_PATH" 2>/dev/null; then
     echo "[✓] Certificate installed into simulator keychain."
 else
-    echo "[!] simctl keychain not available or failed."
-    echo "[*] Opening certificate manually. You may need to trust it in Settings > General > About > Certificate Trust Settings."
-    open -a Simulator
-    open "$MITM_CERT_PATH"
+    echo "[x] simctl unavailable - automatic install not possible."
+    exit 1
+    # Manual install -> Unused because we want it to run automatically
+#    echo "[!] simctl keychain not available or failed."
+#    echo "[*] Opening certificate manually. You may need to trust it in Settings > General > About > Certificate Trust Settings."
+#    open -a Simulator
+#    open "$MITM_CERT_PATH"
 fi
 
 echo "[✓] iOS Simulator CA setup complete."
 
-echo "[*] Setup mitmproxy to intercept traffic:"
-
-interface="Ethernet" # Interface on Mac -> Bitrise uses "Ethernet", locally you might use Wi-Fi. Alternatively you could loop over all interfaces on Mac and update the inferface for all of them
+echo "[*] Setup mitmproxy to intercept traffic..."
+# Use the Interface that you device uses: Wi-Fi or Ethernet
+# If you are not running this on a CI/CD environment, then be sure to reset the networksetups by updating the state values to "off" after use
+interface="Ethernet"
 echo "Setting proxy on $interface"
 networksetup -setwebproxy "$interface" localhost 8080
 networksetup -setwebproxystate "$interface" on
