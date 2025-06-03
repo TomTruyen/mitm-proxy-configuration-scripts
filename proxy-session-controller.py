@@ -78,7 +78,10 @@ class Recorder:
             
     def save_flows_as_json(self):
         ctx.log.info(f"Saving {len(self.flows)} flows to {self.output_filename}")
-        os.makedirs(os.path.dirname(self.output_filename), exist_ok=True)
+
+        dir_path = os.path.dirname(self.output_filename)
+        if dir_path:
+            os.makedirs(dir_path, exist_ok=True)
         
         data = []
         for flow in self.flows:
