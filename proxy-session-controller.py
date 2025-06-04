@@ -40,14 +40,19 @@ def _is_ignored(flow: http.HTTPFlow) -> bool:
     host = urlparse(flow.request.pretty_url).netloc.lower()
     return any(ignored in host for ignored in IGNORED_ENDPOINTS)
 
-def try_parse_json(content, headers):
-    content_type = headers.get("content-type", "")
-    if "application/json" in content_type.lower():
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            return content  # fall back to raw if invalid JSON
-    return content
+def log_safe(message):
+    if threading.current_thread() is threading.main_thread():
+        # can only be called from main thread, so if we call this in subthread it crashes
+        # locally this gave no issues, but on CI/CD where I forced mitmproxy in background it caused failures
+        log_safe(message)
+    else:
+        print(message)
+
+def try_parse_json(content):
+    try:
+        return json.loads(content)
+    except Exception:
+        return content
 
 class Recorder:
     def __init__(self):
@@ -58,9 +63,9 @@ class Recorder:
     def request(self, flow: http.HTTPFlow):
         if self.recording and not _is_ignored(flow):
             url = flow.request.pretty_url
-            ctx.log.info(f"Request URL: {url}")
+            log_safe(f"Request URL: {url}")
             if url in ControlServer.map_local:
-                ctx.log.info(f"Mapping local file to URL: {ControlServer.map_local.get(url, 'No mapping found')}")
+                log_safe(f"Mapping local file to URL: {ControlServer.map_local.get(url, 'No mapping found')}")
                 file_path = ControlServer.map_local[url]
                 try:
                     with open(file_path, 'rb') as f:
@@ -77,7 +82,7 @@ class Recorder:
             self.flows.append(flow) # Store the flow to later on save as JSON
             
     def save_flows_as_json(self):
-        ctx.log.info(f"Saving {len(self.flows)} flows to {self.output_filename}")
+        log_safe(f"Saving {len(self.flows)} flows to {self.output_filename}")
 
         dir_path = os.path.dirname(self.output_filename)
         if dir_path:
@@ -174,11 +179,11 @@ class RecorderAddon:
 
     def load(self, loader):
         ControlServer.recorder = self.recorder
+        log_safe("Starting control server on http://localhost:9999")
         threading.Thread(target=self.run_http_server, daemon=True).start()
 
     def run_http_server(self):
         server = HTTPServer(('localhost', 9999), ControlServer)
-        ctx.log.info("Starting control server on http://localhost:9999")
         server.serve_forever()
 
     def request(self, flow):
