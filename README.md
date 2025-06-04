@@ -129,6 +129,20 @@ This starts mitmproxy with:
 - Listening port: `8080`
 - Control API: `http://localhost:9999`
 
+Running mitmproxy in background with the addon:
+
+```bash
+screen -dm mitmdump -p 8080 -s proxy-session-controller.py
+```
+
+The `screen` command is an advanced terminal multiplexer that allows you to have multiple sessions within one terminal window. This allows you to start the `mitmdump` as a process in the background and allows you to continue using the terminal.
+
+This is handy for if you use it in a CI/CD environment where you don't want a step to be stuck indefintely because `mitmdump` is occupying the terminal with an interactive session.
+
+Furthermore `screen` allows you to re-attach to the process by just using `screen -r`, that way you can easily check any logs produces by the command that was running in the background.
+
+To verify if `mitmdump` is running with screen you can use `pgrep mitmdump` this should return a PID.
+
 ---
 
 ## 🛠️ Control API Endpoints
