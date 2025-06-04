@@ -89,6 +89,9 @@ sleep 15
 
 adb_s wait-for-device
 
+echo "[*] Set 'Stay Awake' mode to active"
+adb_s shell svc power stayon true
+
 # Resetting Wifi (Toggle of and on) -> This ensure that WiFi is used instead of Mobile Data
 echo "[*] Resetting emulator Wi-Fi..."
 adb_s shell svc wifi disable
@@ -103,8 +106,5 @@ adb_s emu network delay none
 adb_s emu network speed full
 adb_s shell settings put global http_proxy "$HOST_IP:$MITM_PORT"
 echo "[✓] Proxy setup complete"
-
-echo "[*] Set 'Stay Awake' mode to active"
-adb_s shell svc power stayon true
 
 echo "[✓] Android emulator is now routed through mitmproxy with trusted CA."
