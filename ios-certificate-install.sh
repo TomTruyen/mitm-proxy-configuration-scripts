@@ -54,4 +54,14 @@ networksetup -setwebproxystate "$interface" on
 networksetup -setsecurewebproxy "$interface" localhost 8080
 networksetup -setsecurewebproxystate "$interface" on
 
+# Optional -> If you have issues with certain things like dependencies or general network traffic no longer working on CI/CD then use this, else don't
+# echo "[*] Trusting mitmproxy CA on Mac..." # Required for xcode-test to actually download dependencies
+# security create-keychain -p password build.keychain
+# security import "$MITM_CERT_PATH" -k build.keychain -A
+# security list-keychains -s build.keychain login.keychain
+# security set-keychain-settings -t 3600 -l build.keychain
+# security unlock-keychain -p password build.keychain
+# Trust the certificate (for macOS 10.15+) -> sudo might not work. Can also be run as a user (without sudo)
+# sudo security add-trusted-cert -d -r trustRoot -k "/Library/Keychains/System.keychain" "$MITM_CERT_PATH"
+
 echo "[✓] Proxy setup complete. You can now use mitmproxy to intercept iOS simulator traffic."
