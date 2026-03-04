@@ -29,6 +29,38 @@ adb_s() {
     command adb -s "$EMULATOR" "$@"
 }
 
+adb_root_with_retry() {
+  local attempts=0
+  local max_attempts=3
+
+  while [ $attempts -lt $max_attempts ]; do
+    echo "[*] Attempting adb root (try $((attempts+1))/$max_attempts)..."
+
+    if adb_s root; then
+      echo "[*] Waiting for device after root..."
+      adb_s wait-for-device
+      sleep 2
+
+      # Verify we are actually root
+      if adb_s shell id | grep -q "uid=0"; then
+        echo "[✓] ADB root successful"
+        return 0
+      fi
+    fi
+
+    echo "[!] adb root failed, retrying..."
+    adb kill-server
+    sleep 2
+    adb start-server
+    sleep 2
+
+    attempts=$((attempts+1))
+  done
+
+  echo "[x] adb root failed after retries"
+  return 1
+}
+
 echo "[*] Installing CA root certificate on $EMULATOR..."
 
 # CA Certificates in Android are stored by the name of their hash, with a ‘0’ as extension (Example: c8450d0d.0)
@@ -39,7 +71,7 @@ cp "$MITM_CERT_PATH/mitmproxy-ca-cert.cer" "$MITM_CERT_FINAL_PATH"
 
 # Verification needs to be disabled for some specific cases
 echo "[*] Disabling Verification..."
-adb_s root
+adb_root_with_retry
 adb_s shell avbctl disable-verification
 adb_s reboot
 adb_s wait-for-device
@@ -51,7 +83,7 @@ if [ "$ANDROID_API_LEVEL" -ge 34 ]; then
     echo "[*] Detected Android 14+ (API $ANDROID_API_LEVEL) – using Conscrypt APEX method"
 
     echo "[*] Rewriting mount namespaces for system certificates..."
-    adb_s root
+    adb_root_with_retry
     adb_s shell setenforce 0
     adb_s shell mount -o remount,exec /apex
     adb_s shell cp -r -p /apex/com.android.conscrypt /apex/com.android.conscrypt-bak
@@ -69,7 +101,7 @@ else
     echo "[*] Detected Android <= 13 (API $ANDROID_API_LEVEL) – using classic /system method"
     # (Android 13 and below method)
     echo "[*] Remounting system..."
-    adb_s root
+    adb_root_with_retry
     adb_s remount
     echo "[✓] System remounted"
 
@@ -84,8 +116,8 @@ else
     adb_s wait-for-device
 fi
 
-echo "[*] Waiting for 15s to ensure Wi-Fi is ready..."
-sleep 15
+echo "[*] Waiting for emulator to boot..."
+sleep 30
 
 adb_s wait-for-device
 
