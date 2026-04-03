@@ -1,9 +1,16 @@
 import os
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from mitmproxy import ctx, http
 import json
 from urllib.parse import urlparse, parse_qs
+
+# Path to the map_local_mapping.json file (adjust if needed)
+PATH_TO_MAP_LOCAL_MAPPING = os.path.join(
+    os.path.dirname(__file__),
+    "..", "..", "..", "common_tests", "network_tests", "map_local", "map_local_mapping.json"
+)
 
 # On Startup the Emulator/Simulator performs a lot of API calls to get the system ready. This causes in a lot of noise on the Network
 # Here we list endpoints that we don't want to "capture" since they are not important for us. Doing so reduces the Noise in our Network Logs
@@ -54,6 +61,42 @@ def try_parse_json(content):
     except Exception:
         return content
 
+def resolve_refs(entries, defs):
+    """
+    Resolves $ref entries by merging the referenced $defs base with local overrides.
+    Local properties always take precedence over properties from the def.
+    """
+    resolved = []
+    for entry in entries:
+        if "$ref" in entry:
+            ref_name = entry["$ref"]
+            base = defs.get(ref_name)
+            if base is None:
+                print(f"Warning: $ref '{ref_name}' not found in $defs, skipping")
+                continue
+            merged = {**base, **{k: v for k, v in entry.items() if k != "$ref"}}
+            resolved.append(merged)
+        else:
+            resolved.append(entry)
+    return resolved
+
+def load_map_local_entries(test_name):
+    """
+    Loads and resolves map local entries for a given test name from map_local_mapping.json.
+    Returns a list of resolved entry dicts.
+    """
+    if not os.path.exists(PATH_TO_MAP_LOCAL_MAPPING):
+        print(f"Mapping file not found: {PATH_TO_MAP_LOCAL_MAPPING}")
+        return []
+
+    with open(PATH_TO_MAP_LOCAL_MAPPING, "r") as f:
+        mapping = json.load(f)
+
+    defs = mapping.get("$defs", {})
+    mappings = mapping.get("mappings", mapping)
+    entries = mappings.get(test_name, [])
+    return resolve_refs(entries, defs)
+
 class Recorder:
     def __init__(self):
         self.recording = False
@@ -64,30 +107,45 @@ class Recorder:
         if self.recording and not _is_ignored(flow):
             url = flow.request.pretty_url
             log_safe(f"Request URL: {url}")
-            if url in ControlServer.map_local:
-                log_safe(f"Mapping local file to URL: {ControlServer.map_local.get(url, 'No mapping found')}")
-                file_path = ControlServer.map_local[url]
-                try:
-                    with open(file_path, 'rb') as f:
-                        flow.response = http.Response.make(
-                            200, 
-                            f.read(),  
-                            {"Content-Type": "application/json"}
-                        )
-                except FileNotFoundError:
-                    ctx.log.error(f"File not found for URL {url}: {file_path}")
+
+            matched_entry = None
+            for entry in ControlServer.map_local_entries:
+                pattern = entry.get("url")
+                if pattern and re.search(pattern, url):
+                    matched_entry = entry
+                    break
+
+            if matched_entry:
+                log_safe(f"Map Local entry matched for {url}: {matched_entry}")
+                body_path = matched_entry.get("body")
+                headers_path = matched_entry.get("headers")
+                status = matched_entry.get("status", 200)
+
+                response_headers = {"Content-Type": "application/json"}
+                if headers_path and os.path.exists(headers_path):
+                    with open(headers_path, 'r') as hf:
+                        response_headers = json.load(hf)
+
+                if body_path:
+                    try:
+                        with open(body_path, 'rb') as f:
+                            flow.response = http.Response.make(status, f.read(), response_headers)
+                    except FileNotFoundError:
+                        ctx.log.error(f"File not found for URL {url}: {body_path}")
+                else:
+                    flow.response = http.Response.make(status, b"", response_headers)
 
     def response(self, flow: http.HTTPFlow):
         if self.recording and not _is_ignored(flow):
             self.flows.append(flow) # Store the flow to later on save as JSON
-            
+
     def save_flows_as_json(self):
         log_safe(f"Saving {len(self.flows)} flows to {self.output_filename}")
 
         dir_path = os.path.dirname(self.output_filename)
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
-        
+
         data = []
         for flow in self.flows:
             if flow.response:
@@ -114,8 +172,8 @@ class Recorder:
             json.dump(data, f, indent=2)
 
 class ControlServer(BaseHTTPRequestHandler):
-    recorder = None  # class variable
-    map_local = {}  # class variable for local mapping
+    recorder = None
+    map_local_entries = []  # list of resolved mapping entries
 
     def read_body(self):
         content_length = int(self.headers.get('Content-Length', 0))
@@ -143,11 +201,28 @@ class ControlServer(BaseHTTPRequestHandler):
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"Recording stopped and saved")
+        elif path == "/map_local/load":
+            payload = self.read_body()
+            test_name = payload.get("testName")
+
+            if not test_name:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(b"Missing 'testName'")
+                return
+
+            entries = load_map_local_entries(test_name)
+            ControlServer.map_local_entries = entries
+
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(f"Loaded {len(entries)} mappings for '{test_name}'".encode())
         elif path == "/map_local/enable":
-            url = data.get("url")
-            file_path = data.get("file_path")
+            payload = self.read_body()
+            url = payload.get("url")
+            file_path = payload.get("file_path")
             if url and file_path:
-                ControlServer.map_local[url] = file_path
+                ControlServer.map_local_entries.append({"url": url, "body": file_path})
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"Mapping added")
@@ -156,15 +231,17 @@ class ControlServer(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"Missing 'url' or 'file_path'")
         elif path == "/map_local/disable":
-            url = data.get("url")
-            if url in ControlServer.map_local:
-                del ControlServer.map_local[url]
+            payload = self.read_body()
+            url = payload.get("url")
+            if url:
+                ControlServer.map_local_entries = [
+                    e for e in ControlServer.map_local_entries if e.get("url") != url
+                ]
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"Mapping removed")
             else:
-                # Clear all mappings if no URL is provided
-                ControlServer.map_local.clear()
+                ControlServer.map_local_entries.clear()
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(b"All mappings cleared")
@@ -175,7 +252,6 @@ class ControlServer(BaseHTTPRequestHandler):
 class RecorderAddon:
     def __init__(self):
         self.recorder = Recorder()
-        self.map_local = {}
 
     def load(self, loader):
         ControlServer.recorder = self.recorder
@@ -195,4 +271,3 @@ class RecorderAddon:
 addons = [
     RecorderAddon()
 ]
-
