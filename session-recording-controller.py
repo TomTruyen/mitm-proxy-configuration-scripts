@@ -48,12 +48,7 @@ def _is_ignored(flow: http.HTTPFlow) -> bool:
     return any(ignored in host for ignored in IGNORED_ENDPOINTS)
 
 def log_safe(message):
-    if threading.current_thread() is threading.main_thread():
-        # can only be called from main thread, so if we call this in subthread it crashes
-        # locally this gave no issues, but on CI/CD where I forced mitmproxy in background it caused failures
-        log_safe(message)
-    else:
-        print(message)
+    print(message)
 
 def try_parse_json(content):
     try:

@@ -7,7 +7,7 @@ MITM_CERT_PATH="$HOME/.mitmproxy"
 HOST_IP="10.0.2.2"  # This is how emulators access the host
 
 # Ensure mitmproxy CA cert exists - Launching mitm will generate upon launch
-if [ ! -f ~/.mitmproxy/mitmproxy-ca-cert.cer ]; then
+if [ ! -f ~/.mitmproxy/mitmproxy-ca-cert.pem ]; then
     echo "[*] Generating mitmproxy CA certificate..."
     mitmdump --set block_global=false --mode=transparent --listen-port=0 --quiet &
     sleep 2
@@ -64,10 +64,11 @@ adb_root_with_retry() {
 echo "[*] Installing CA root certificate on $EMULATOR..."
 
 # CA Certificates in Android are stored by the name of their hash, with a ‘0’ as extension (Example: c8450d0d.0)
-HASHED_CERT_NAME=$(openssl x509 -inform PEM -subject_hash_old -in "$MITM_CERT_PATH/mitmproxy-ca-cert.cer" | head -1)
+# We use the .pem file because openssl -subject_hash_old expects PEM format.
+HASHED_CERT_NAME=$(openssl x509 -inform PEM -subject_hash_old -in "$MITM_CERT_PATH/mitmproxy-ca-cert.pem" | head -1)
 MITM_CERT_FINAL_NAME="$HASHED_CERT_NAME.0"
 MITM_CERT_FINAL_PATH="$MITM_CERT_PATH/$MITM_CERT_FINAL_NAME"
-cp "$MITM_CERT_PATH/mitmproxy-ca-cert.cer" "$MITM_CERT_FINAL_PATH"
+cp "$MITM_CERT_PATH/mitmproxy-ca-cert.pem" "$MITM_CERT_FINAL_PATH"
 
 # Verification needs to be disabled for some specific cases
 echo "[*] Disabling Verification..."
