@@ -38,6 +38,13 @@ if [ -z "$EMULATOR" ]; then
             --package "$SYSTEM_IMAGE" \
             --device "$DEVICE_PROFILE" \
             --force
+        
+        # Enable hardware keyboard
+        AVD_CONFIG="$HOME/.android/avd/${AVD_NAME}.avd/config.ini"
+        if [ -f "$AVD_CONFIG" ]; then
+            echo "[*] Enabling hardware keyboard in $AVD_CONFIG"
+            sed -i '' 's/hw.keyboard=no/hw.keyboard=yes/' "$AVD_CONFIG" || sed -i 's/hw.keyboard=no/hw.keyboard=yes/' "$AVD_CONFIG"
+        fi
     fi
 
     # Launch the emulator
@@ -60,6 +67,8 @@ fi
 
 # Start mitmproxy in the background
 echo "[*] Starting mitmproxy..."
+# Ensure port 8080 is clear
+lsof -ti:8080 | xargs kill -9 2>/dev/null || true
 mitmdump -p 8080 -s "$SCRIPT_DIR/session-recording-controller.py" --ssl-insecure &
 MITM_PID=$!
 sleep 2
